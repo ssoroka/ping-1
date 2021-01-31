@@ -96,12 +96,13 @@ func New(addr string) *Pinger {
 
 		addr:              addr,
 		done:              make(chan bool),
-		id:                r.Intn(math.MaxInt16),
+		id:                r.Intn(math.MaxUint16), // uint16 as per icmp spec
 		ipaddr:            nil,
 		ipv4:              false,
 		network:           "ip",
 		protocol:          "udp",
 		awaitingSequences: map[int]struct{}{},
+		rand:              r,
 	}
 }
 
@@ -172,14 +173,16 @@ type Pinger struct {
 	addr   string
 
 	ipv4     bool
-	id       int
-	sequence int
+	id       int // actual range is uint16, 0->math.MaxUint16
+	sequence int // actual range is uint16, 0->math.MaxUint16
 	// awaitingSequences are in-flight sequence numbers we keep track of to help remove duplicate receipts
 	awaitingSequences map[int]struct{}
 	// network is one of "ip", "ip4", or "ip6".
 	network string
 	// protocol is "icmp" or "udp".
 	protocol string
+
+	rand *rand.Rand
 }
 
 type packet struct {
@@ -253,6 +256,13 @@ func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
 
 	p.ipaddr = ipaddr
 	p.addr = ipaddr.String()
+}
+
+//UseRandomSequenceNumbers resets the sequence to a random place in the address space,
+// making sure that it won't collide with other pingers that may have been randomly assigned the same ID.
+// Useful if you're running hundreds or thousands of pingers at once as you might otherwise see ID collisions.
+func (p *Pinger) UseRandomSequenceNumbers() {
+	p.sequence = p.rand.Intn(math.MaxUint16)
 }
 
 // IPAddr returns the ip address of the target host.
